@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .selector-container {
+            max-width: 800px;
+            margin: 0 auto;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .question-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .option-button {
+            width: 100%;
+            padding: 16px;
+            margin: 8px 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+        }
+        .option-button:hover {
+            border-color: #3b82f6;
+            background: #f0f9ff;
+        }
+        .result-card {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-item {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }
+        .feature-item:before {
+            content: "✓";
+            color: #22c55e;
+            margin-right: 8px;
+        }
+        .pricing-box {
+            background: #f0f9ff;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .cost-breakdown {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 4px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .total-cost {
+            font-weight: bold;
+            margin-top: 16px;
+            padding-top: 8px;
+            border-top: 2px solid #3b82f6;
+        }
+        .input-group {
+            margin: 16px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+        }
+        .start-over {
+            background: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 16px;
+        }
+                .option-button.selected {
+            background: #f0f9ff;
+            border-color: #3b82f6;
+        }
+        .checkmark {
+            margin-left: auto;
+            color: #3b82f6;
+        }
+        .continue-button {
+            background: #3b82f6;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 16px;
+        }
+        .continue-button:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body>
+    <div id="selector-app" class="selector-container">
+        <div id="question-container"></div>
+        <div id="result-container"></div>
+    </div>
+
+    <script>
+        const questions = [
+            {
+                id: 'investmentNeeds',
+                text: 'What best describes your investment needs?',
+                options: [
+                    { value: 'both', label: 'I need both investment management AND comprehensive financial planning' },
+                    { value: 'planOnly', label: 'I just need help creating a financial plan' },
+                    { value: 'investOnly', label: 'I just need help managing my investments' }
+                ]
+            },
+            {
+                id: 'planningNeeds',
+                text: 'Are you single or part of a couple?',
+                options: [
+                    { value: 'single', label: 'Single' },
+                    { value: 'couple', label: 'Couple' }
+                ]
+            },
+            {
+                id: 'complexity',
+                text: 'Which of these apply to your situation? (Select all that apply)',
+                options: [
+                    { value: 'w2', label: 'W2 Income Only' },
+                    { value: 'business', label: 'Business Owner' },
+                    { value: 'equity', label: 'Equity Compensation (RSUs, Stock Options)' },
+                    { value: 'crypto', label: 'Cryptocurrency Holdings' },
+                    { value: 'estate', label: 'Complex Estate Planning Needs' }
+                ],
+                multiSelect: true
+            }
+        ];
+
+        let currentQuestion = 0;
+        let answers = {};
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount);
+        }
+
+        function calculateAUMFee(amount, isHybrid) {
+            if (amount <= 250000) return 2400; // $200/month
+            
+            const tiers = isHybrid ? [
+                { threshold: 500000, rate: 0.008 },
+                { threshold: 1500000, rate: 0.007 },
+                { threshold: 3000000, rate: 0.006 },
+                { threshold: 5000000, rate: 0.005 },
+                { threshold: 10000000, rate: 0.004 },
+                { threshold: Infinity, rate: 0.003 }
+            ] : [
+                { threshold: 500000, rate: 0.006 },
+                { threshold: 1500000, rate: 0.005 },
+                { threshold: 3000000, rate: 0.004 },
+                { threshold: 5000000, rate: 0.003 },
+                { threshold: 10000000, rate: 0.002 },
+                { threshold: Infinity, rate: 0.001 }
+            ];
+            
+            return amount * (tiers.find(tier => amount <= tier.threshold).rate);
+        }
+
+        function showQuestion() {
+            const question = questions[currentQuestion];
+            const container = document.getElementById('question-container');
+            
+            if (question.multiSelect) {
+                container.innerHTML = `
+                    <div class="question-card">
+                        <h3>${question.text}</h3>
+                        <div>
+                            ${question.options.map(option => `
+                                <button class="option-button ${answers[question.id]?.includes(option.value) ? 'selected' : ''}" 
+                                    onclick="handleMultiSelect('${question.id}', '${option.value}')">
+                                    ${option.label}
+                                    ${answers[question.id]?.includes(option.value) ? '<span class="checkmark">✓</span>' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        <button class="continue-button" onclick="handleMultiSelectContinue()">Continue</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="question-card">
+                        <h3>${question.text}</h3>
+                        <div>
+                            ${question.options.map(option => `
+                                <button class="option-button" onclick="handleAnswer('${question.id}', '${option.value}')">
+                                    ${option.label}
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        function handleAnswer(questionId, value) {
+            answers[questionId] = value;
+            
+            if (currentQuestion < questions.length - 1) {
+                currentQuestion++;
+                showQuestion();
+            } else {
+                showResult();
+            }
+        }
+
+        function calculateCosts(aumAmount = 0) {
+            const { investmentNeeds, planningNeeds, complexity } = answers;
+            const isCouple = planningNeeds === 'couple';
+            const isComplex = complexity !== 'w2';
+            
+            if (investmentNeeds === 'both') {
+                const planningBase = isCouple 
+                    ? (isComplex ? 4500 : 2500)
+                    : (isComplex ? 3500 : 2000);
+                const planningMonthly = isComplex ? 149 : 99;
+                const planningTotal = (planningBase * 0.5) + (planningMonthly * 12); // 50% off planning
+                const aumFee = calculateAUMFee(aumAmount, true);
+                
+                return {
+                    planningBase: planningBase * 0.5,
+                    planningMonthly: planningMonthly * 12,
+                    aumFee,
+                    total: planningTotal + aumFee
+                };
+            } else if (investmentNeeds === 'planOnly') {
+                const planningBase = isCouple 
+                    ? (isComplex ? 4500 : 2500)
+                    : (isComplex ? 3500 : 2000);
+                const planningMonthly = isComplex ? 149 : 99;
+                
+                return {
+                    planningBase,
+                    planningMonthly: planningMonthly * 12,
+                    aumFee: 0,
+                    total: planningBase + (planningMonthly * 12)
+                };
+            } else {
+                const aumFee = calculateAUMFee(aumAmount, false);
+                return {
+                    planningBase: 0,
+                    planningMonthly: 0,
+                    aumFee,
+                    total: aumFee
+                };
+            }
+        }
+
+        function handleMultiSelect(questionId, value) {
+            if (!answers[questionId]) {
+                answers[questionId] = [];
+            }
+            
+            const index = answers[questionId].indexOf(value);
+            if (index === -1) {
+                answers[questionId].push(value);
+            } else {
+                answers[questionId].splice(index, 1);
+            }
+            
+            showQuestion(); // Refresh the display
+        }
+
+        function handleMultiSelectContinue() {
+            if (!answers['complexity'] || answers['complexity'].length === 0) {
+                answers['complexity'] = ['w2']; // Default to W2 if nothing selected
+            }
+            currentQuestion++;
+            showResult();
+        }
+
+        function calculateComplexityTier() {
+            const selectedOptions = answers['complexity'] || [];
+            if (selectedOptions.length <= 1) {
+                if (selectedOptions[0] === 'w2') return 'basic';
+                return 'complex1';
+            }
+            return 'complex2';
+        }
+
+        function calculateCosts(aumAmount = 0) {
+            const { investmentNeeds, planningNeeds } = answers;
+            const isCouple = planningNeeds === 'couple';
+            const complexityTier = calculateComplexityTier();
+            
+            let basePricing = {
+                basic: { single: 2000, couple: 2500, monthly: 99 },
+                complex1: { single: 3500, couple: 4500, monthly: 149 },
+                complex2: { single: 6000, couple: 8000, monthly: 200 }
+            };
+            
+            if (investmentNeeds === 'both') {
+                const planningBase = isCouple 
+                    ? basePricing[complexityTier].couple
+                    : basePricing[complexityTier].single;
+                const planningMonthly = basePricing[complexityTier].monthly;
+                const planningTotal = (planningBase * 0.5) + (planningMonthly * 12); // 50% off planning
+                const aumFee = calculateAUMFee(aumAmount, true);
+                
+                return {
+                    planningBase: planningBase * 0.5,
+                    planningMonthly: planningMonthly * 12,
+                    aumFee,
+                    total: planningTotal + aumFee
+                };
+            } else if (investmentNeeds === 'planOnly') {
+                const planningBase = isCouple 
+                    ? basePricing[complexityTier].couple
+                    : basePricing[complexityTier].single;
+                const planningMonthly = basePricing[complexityTier].monthly;
+                
+                return {
+                    planningBase,
+                    planningMonthly: planningMonthly * 12,
+                    aumFee: 0,
+                    total: planningBase + (planningMonthly * 12)
+                };
+            } else {
+                const aumFee = calculateAUMFee(aumAmount, false);
+                return {
+                    planningBase: 0,
+                    planningMonthly: 0,
+                    aumFee,
+                    total: aumFee
+                };
+            }
+        }
+
+        function showResult() {
+            const container = document.getElementById('question-container');
+            container.style.display = 'none';
+            
+            const resultContainer = document.getElementById('result-container');
+            const recommendation = getRecommendation();
+            
+            let aumInputHtml = '';
+            if (answers.investmentNeeds !== 'planOnly') {
+                aumInputHtml = `
+                    <div class="input-group">
+                        <label>Enter your total investment assets ($):</label>
+                        <input type="number" id="aumInput" placeholder="e.g., 500000" onchange="updateCosts(this.value)">
+                    </div>
+                `;
+            }
+            
+            resultContainer.innerHTML = `
+                <div class="result-card">
+                    <h2>${recommendation.title}</h2>
+                    <p>${recommendation.description}</p>
+                    
+                    ${aumInputHtml}
+
+                    <div id="costBreakdown" class="cost-breakdown">
+                        <!-- Costs will be populated here -->
+                    </div>
+
+                    <h4>Features Include:</h4>
+                    <ul class="feature-list">
+                        ${recommendation.features.map(feature => `
+                            <li class="feature-item">${feature}</li>
+                        `).join('')}
+                    </ul>
+
+                    <button class="start-over" onclick="resetSelector()">Start Over</button>
+                </div>
+            `;
+            
+            // Show initial costs with $0 AUM
+            updateCosts(0);
+        }
+
+        function updateCosts(aumAmount) {
+            const costs = calculateCosts(parseFloat(aumAmount) || 0);
+            const breakdownContainer = document.getElementById('costBreakdown');
+            
+            let html = '<h4>Annual Cost Breakdown:</h4>';
+            
+            if (costs.planningBase > 0) {
+                html += `
+                    <div class="cost-item">
+                        <span>Financial Planning (one-time):</span>
+                        <span>${formatCurrency(costs.planningBase)}</span>
+                    </div>
+                `;
+            }
+            
+            if (costs.planningMonthly > 0) {
+                html += `
+                    <div class="cost-item">
+                        <span>Monthly Fee (annual):</span>
+                        <span>${formatCurrency(costs.planningMonthly)}</span>
+                    </div>
+                `;
+            }
+            
+            if (costs.aumFee > 0) {
+                html += `
+                    <div class="cost-item">
+                        <span>Investment Management:</span>
+                        <span>${formatCurrency(costs.aumFee)}</span>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="cost-item total-cost">
+                    <span>Total First Year Cost:</span>
+                    <span>${formatCurrency(costs.total)}</span>
+                </div>
+            `;
+            
+            breakdownContainer.innerHTML = html;
+        }
+
+        function getRecommendation() {
+            const { investmentNeeds } = answers;
+            
+            if (investmentNeeds === 'both') {
+                return {
+                    title: 'Hybrid Wealth Management',
+                    description: 'Our most popular option! Get the best of both worlds with comprehensive financial planning and investment management.',
+                    features: [
+                        'Complete financial plan',
+                        'Investment management',
+                        'Up to 4 portfolio reviews annually',
+                        'Unlimited email/phone access',
+                        'No minimum asset requirement',
+                        'No yearly commitment'
+                    ]
+                };
+            } else if (investmentNeeds === 'planOnly') {
+                return {
+                    title: 'Financial Planning Only',
+                    description: 'Comprehensive financial planning with ongoing support.',
+                    features: [
+                        'Complete financial plan',
+                        '6-week planning process',
+                        'Annual plan review',
+                        '2 check-in meetings annually',
+                        'Unlimited email access',
+                        'Cash-flow planning',
+                        'Investment strategy',
+                        'Risk management',
+                        'Tax planning'
+                    ]
+                };
+            } else {
+                return {
+                    title: 'Investment Management Only',
+                    description: 'Professional portfolio management without comprehensive planning.',
+                    features: [
+                        'Investment management',
+                        'Up to 4 portfolio reviews annually',
+                        'Unlimited email/phone access',
+                        'Regular rebalancing',
+                        'Tax-loss harvesting'
+                    ]
+                };
+            }
+        }
+
+        function resetSelector() {
+            currentQuestion = 0;
+            answers = {};
+            document.getElementById('question-container').style.display = 'block';
+            document.getElementById('result-container').innerHTML = '';
+            showQuestion();
+        }
+
+        // Initialize the selector
+        showQuestion();
+    </script>
+</body>
+</html>
