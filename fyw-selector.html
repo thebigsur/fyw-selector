@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>For Your Wealth - Service Calculator</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .selector-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 24px;
+            color: #1a1a1a;
+        }
+        .option-button {
+            width: 100%;
+            padding: 16px;
+            margin: 8px 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            text-align: left;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 16px;
+            color: #1a1a1a;
+        }
+        .option-button:hover {
+            border-color: #3b82f6;
+            background: #f0f9ff;
+        }
+        .option-button.selected {
+            background: #f0f9ff;
+            border-color: #3b82f6;
+        }
+        .continue-button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 16px;
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        .continue-button:hover {
+            background: #2563eb;
+        }
+        .input-group {
+            margin: 16px 0;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .cost-breakdown {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 12px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .total-cost {
+            font-weight: bold;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 2px solid #3b82f6;
+        }
+        .checkmark {
+            color: #3b82f6;
+            margin-left: 8px;
+        }
+        .start-over {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 12px;
+            background: #f3f4f6;
+            color: #4b5563;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 16px;
+            transition: background 0.2s;
+        }
+        .start-over:hover {
+            background: #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    <div id="calculator" class="selector-container">
+        <!-- Content will be dynamically inserted here -->
+    </div>
+
+    <script>
+        // Store current state
+        let currentState = {
+            step: 1,
+            selections: {
+                serviceType: '',
+                clientType: '',
+                complexity: [],
+                aum: 0
+            }
+        };
+
+        // Format currency
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(amount);
+        }
+
+        // Base rates for different service tiers
+        const baseRates = {
+            basic: { single: 2000, couple: 2500, monthly: 99 },
+            complex1: { single: 3500, couple: 4500, monthly: 149 },
+            complex2: { single: 6000, couple: 8000, monthly: 200 }
+        };
+
+        // Calculate AUM fee
+        function calculateAUMFee(amount, isHybrid) {
+            if (amount <= 250000) return 2400;
+            
+            const hybridTiers = [
+                { threshold: 500000, rate: 0.008 },
+                { threshold: 1500000, rate: 0.007 },
+                { threshold: 3000000, rate: 0.006 },
+                { threshold: 5000000, rate: 0.005 },
+                { threshold: 10000000, rate: 0.004 },
+                { threshold: Infinity, rate: 0.003 }
+            ];
+            
+            const investmentTiers = [
+                { threshold: 500000, rate: 0.006 },
+                { threshold: 1500000, rate: 0.005 },
+                { threshold: 3000000, rate: 0.004 },
+                { threshold: 5000000, rate: 0.003 },
+                { threshold: 10000000, rate: 0.002 },
+                { threshold: Infinity, rate: 0.001 }
+            ];
+            
+            const tiers = isHybrid ? hybridTiers : investmentTiers;
+            const tier = tiers.find(t => amount <= t.threshold);
+            return amount * tier.rate;
+        }
+
+        // Get complexity tier based on selections
+        function getComplexityTier() {
+            if (currentState.selections.complexity.length === 0 || 
+                (currentState.selections.complexity.length === 1 && 
+                 currentState.selections.complexity[0] === 'w2')) {
+                return 'basic';
+            }
+            return currentState.selections.complexity.length === 1 ? 'complex1' : 'complex2';
+        }
+
+        // Calculate final results
+        function calculateResults() {
+            const complexityTier = getComplexityTier();
+            const baseFee = baseRates[complexityTier][currentState.selections.clientType];
+            const monthlyFee = baseRates[complexityTier].monthly;
+            
+            let results = {
+                baseFee: 0,
+                monthlyFee: 0,
+                aumFee: 0,
+                totalFirstYear: 0
+            };
+
+            switch (currentState.selections.serviceType) {
+                case 'planningOnly':
+                    results.baseFee = baseFee;
+                    results.monthlyFee = monthlyFee * 12;
+                    results.totalFirstYear = baseFee + (monthlyFee * 12);
+                    break;
+                    
+                case 'hybrid':
+                    results.baseFee = baseFee;
+                    results.monthlyFee = monthlyFee * 12;
+                    results.aumFee = calculateAUMFee(currentState.selections.aum, true);
+                    results.totalFirstYear = (baseFee * 0.5) + results.aumFee;
+                    break;
+                    
+                case 'investmentOnly':
+                    results.aumFee = calculateAUMFee(currentState.selections.aum, false);
+                    results.totalFirstYear = results.aumFee;
+                    break;
+            }
+
+            return results;
+        }
+
+        // Handle service type selection
+        function selectService(serviceType) {
+            currentState.selections.serviceType = serviceType;
+            currentState.step = 2;
+            render();
+        }
+
+        // Handle client type selection
+        function selectClientType(clientType) {
+            currentState.selections.clientType = clientType;
+            currentState.step = 3;
+            render();
+        }
+
+        // Handle complexity selection
+        function toggleComplexity(option) {
+            const index = currentState.selections.complexity.indexOf(option);
+            if (index === -1) {
+                currentState.selections.complexity.push(option);
+            } else {
+                currentState.selections.complexity.splice(index, 1);
+            }
+            render();
+        }
+
+        // Handle AUM input
+        function updateAUM(value) {
+            currentState.selections.aum = parseFloat(value) || 0;
+            render();
+        }
+
+        // Show results
+        function showResults() {
+            currentState.step = 4;
+            render();
+        }
+
+        // Reset calculator
+        function resetCalculator() {
+            currentState = {
+                step: 1,
+                selections: {
+                    serviceType: '',
+                    clientType: '',
+                    complexity: [],
+                    aum: 0
+                }
+            };
+            render();
+        }
+
+        // Render the calculator
+        function render() {
+            const container = document.getElementById('calculator');
+            
+            switch (currentState.step) {
+                case 1:
+                    container.innerHTML = `
+                        <h2 class="title">Select Service Type</h2>
+                        <div>
+                            <button class="option-button" onclick="selectService('planningOnly')">
+                                Financial Planning Only
+                            </button>
+                            <button class="option-button" onclick="selectService('hybrid')">
+                                Hybrid Model
+                            </button>
+                            <button class="option-button" onclick="selectService('investmentOnly')">
+                                Investment Management Only
+                            </button>
+                        </div>
+                    `;
+                    break;
+
+                case 2:
+                    container.innerHTML = `
+                        <h2 class="title">Are you single or a couple?</h2>
+                        <div>
+                            <button class="option-button" onclick="selectClientType('single')">
+                                Single
+                            </button>
+                            <button class="option-button" onclick="selectClientType('couple')">
+                                Couple
+                            </button>
+                        </div>
+                    `;
+                    break;
+
+                case 3:
+                    const complexityOptions = [
+                        { value: 'w2', label: 'W2 Income Only' },
+                        { value: 'business', label: 'Business Owner' },
+                        { value: 'equity', label: 'Equity Compensation' },
+                        { value: 'crypto', label: 'Cryptocurrency Holdings' },
+                        { value: 'estate', label: 'Estate Planning Needs' }
+                    ];
+                    
+                    container.innerHTML = `
+                        <h2 class="title">Select all that apply:</h2>
+                        <div>
+                            ${complexityOptions.map(option => `
+                                <button class="option-button ${currentState.selections.complexity.includes(option.value) ? 'selected' : ''}"
+                                    onclick="toggleComplexity('${option.value}')">
+                                    ${option.label}
+                                    ${currentState.selections.complexity.includes(option.value) ? 
+                                        '<span class="checkmark">✓</span>' : ''}
+                                </button>
+                            `).join('')}
+                        </div>
+                        <button class="continue-button" onclick="showResults()">
+                            Continue
+                        </button>
+                    `;
+                    break;
+
+                case 4:
+                    const results = calculateResults();
+                    let content = '<h2 class="title">Your Cost Breakdown</h2>';
+                    
+                    if (currentState.selections.serviceType !== 'planningOnly') {
+                        content += `
+                            <div class="input-group">
+                                <label>Enter your total investment assets ($):</label>
+                                <input type="number" 
+                                    value="${currentState.selections.aum}"
+                                    onchange="updateAUM(this.value)"
+                                    placeholder="e.g., 500000">
+                            </div>
+                        `;
+                    }
+
+                    content += '<div class="cost-breakdown">';
+                    
+                    if (currentState.selections.serviceType === 'hybrid') {
+                        content += `
+                            <div class="cost-item">
+                                <span>Planning Fee:</span>
+                                <span>${formatCurrency(results.baseFee)} (-50% discount = ${formatCurrency(results.baseFee * 0.5)})</span>
+                            </div>
+                            <div class="cost-item">
+                                <span>Annual Monthly Fees:</span>
+                                <span>${formatCurrency(results.monthlyFee)} (100% discount = $0)</span>
+                            </div>
+                        `;
+                    } else {
+                        if (results.baseFee > 0) {
+                            content += `
+                                <div class="cost-item">
+                                    <span>Planning Fee:</span>
+                                    <span>${formatCurrency(results.baseFee)}</span>
+                                </div>
+                            `;
+                        }
+                        if (results.monthlyFee > 0) {
+                            content += `
+                                <div class="cost-item">
+                                    <span>Annual Monthly Fees:</span>
+                                    <span>${formatCurrency(results.monthlyFee)}</span>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    if (results.aumFee > 0) {
+                        content += `
+                            <div class="cost-item">
+                                <span>Investment Management Fee:</span>
+                                <span>${formatCurrency(results.aumFee)}</span>
+                            </div>
+                        `;
+                    }
+
+                    content += `
+                            <div class="cost-item total-cost">
+                                <span>Total First Year:</span>
+                                <span>${formatCurrency(results.totalFirstYear)}</span>
+                            </div>
+                        </div>
+                        <button class="start-over" onclick="resetCalculator()">
+                            Start Over
+                        </button>
+                    `;
+
+                    container.innerHTML = content;
+                    break;
+            }
+        }
+
+        // Initialize the calculator
+        render();
+    </script>
+</body>
+</html>
